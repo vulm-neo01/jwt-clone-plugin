@@ -14,109 +14,34 @@ local schema = {
         -- The 'config' record is the custom part of the plugin schema
         type = "record",
         fields = {
-          -- a standard defined field (typedef), with some customizations
-              {
-                request_header = typedefs.header_name {
-                  required = true,
-                  default = "Hello-World"
-                }
-              },
-              {
-                response_header = typedefs.header_name {
-                  required = true,
-                  default = "Bye-World"
-                }
-              },
-              {
-                uri_param = {
-                  description = "A list of querystring parameters that Kong will inspect to retrive JWTs",
-                  type = "set",
-                  elements = {
-                    type = "string"
-                  },
-                  default = {"jwt"},
-                }
-              },
-              {
-                cookie = {
-                  description = "A list of cookie names that kong will inspect to retrieve JWTs",
-                  type = "set",
-                  elements = {
-                    type = "string"
-                  },
-                  default = {}
-                }
-              },
-              {
-                key_claim = {
-                  description = "The name of the claim in which the key identifying the secret must be passed. The plugin will attempt to read this claim from the JWT payload and the header, in that order.",
-                  type = "string",
-                  default = "iss"
-                }
-              },
-              {
-                secret_is_base64 = {
-                  description = "If true, the plugin assumes the credential’s secret to be base64 encoded. You will need to create a base64-encoded secret for your Consumer, and sign your JWT with the original secret.",
-                  type = "boolean",
-                  required = true,
-                  default = false
-                }
-              },
-              {
-                claims_to_verify = {
-                  description = "A list of registered claims that kong can verify as well",
-                  type = "set",
-                  elements = {
+            -- Các trường cấu hình cho plugin
+            { log_level = { type = "string", default = "info" } },
+            { option_expose_headers = { type = "boolean", default = true } },
+            { exposed_headers = { type = "string", default = "all" } },
+            { validate_iss = { type = "string" } },
+            { validate_sub = { type = "string" } },
+            { validate_aud = { type = "string" } },
+            { validate_azp = { type = "string" } },
+            { validate_client_id = { type = "string" } },
+            { validate_dynamic1 = { type = "string" } },
+            { validate_dynamic2 = { type = "string" } },
+            { validate_dynamic3 = { type = "string" } },
+            { claims = {
+                type = "map",
+                keys = {
                     type = "string",
-                    one_of = {
-                      "exp",
-                      "nbf"
-                    }
-                  }
-                }
-              },
-              { anonymous = {
-                description = "An optional string (consumer UUID or username) value to use as an “anonymous” consumer if authentication fails.",
-                type = "string"
+                    match_none = {
+                        { pattern = "^$", err = "Claim name không thể để trống" },
+                    },
                 },
-              },
-              { run_on_preflight = {
-                  description = "A boolean value that indicates whether the plugin should run (and try to authenticate) on OPTIONS preflight requests. If set to false, then OPTIONS requests will always be allowed.",
-                  type = "boolean",
-                  required = true,
-                  default = true
+                values = {
+                    type = "string",
+                    match_none = {
+                        { pattern = "^$", err = "Giá trị claim để kiểm tra không thể để trống" },
+                    },
                 },
-              },
-              { maximum_expiration = {
-                description = "A value between 0 and 31536000 (365 days) limiting the lifetime of the JWT to maximum_expiration seconds in the future.",
-                type = "number",
-                default = 0,
-                between = { 0, 31536000 },
-              }, },
-              { header_names = {
-                description = "A list of HTTP header names that Kong will inspect to retrieve JWTs.",
-                type = "set",
-                elements = { type = "string" },
-                default = { "authorization" },
-              }, },
-
-        },
-        entity_checks = {
-          -- add some validation rules across fields
-          -- the following is silly because it is always true, since they are both required
-          { at_least_one_of = { "request_header", "response_header" }, },
-          -- We specify that both header-names cannot be the same
-          { distinct = { "request_header", "response_header"} },
-          -- {
-          --   conditional = {
-          --     if_field = "config.maximum_expiration",
-          --     if_match = {gt = 0},
-          --     then_field = "config.claims_to_verify",
-          --     then_match = {
-          --       contains = "exp"
-          --     },
-          --   },
-          -- }
+                default = {}
+            } },
         },
       },
     },

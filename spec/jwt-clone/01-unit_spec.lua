@@ -14,32 +14,17 @@ end
 
 describe(PLUGIN_NAME .. ": (schema)", function()
 
-
-  it("accepts distinct request_header and response_header", function()
-    local ok, err = validate({
-        request_header = "My-Request-Header",
-        response_header = "Your-Response",
-      })
-    assert.is_nil(err)
-    assert.is_truthy(ok)
-  end)
-
-
-  it("does not accept identical request_header and response_header", function()
-    local ok, err = validate({
-        request_header = "they-are-the-same",
-        response_header = "they-are-the-same",
-      })
-
-    assert.is_same({
-      ["config"] = {
-        ["@entity"] = {
-          [1] = "values of these fields must be distinct: 'request_header', 'response_header'"
-        }
-      }
-    }, err)
-    assert.is_falsy(ok)
-  end)
-
+  -- Mục đích của đoạn mã này là khẳng định rằng khi trường "auth_header"
+  -- không có giá trị (ngx.null), hàm validate()
+  -- sẽ trả về kết quả không hợp lệ và thông báo lỗi "required field missing"
+  -- sẽ được lưu trong biến "err.config.auth_header".
+  -- it("auth_header is required", function()
+  --   local ok, err = validate({
+  --       auth_header = ngx.null,
+  --     })
+  --   assert.is_falsy(ok)
+  --   assert.is_table(err)
+  --   assert.equals('required field missing', err.config.auth_header)
+  -- end)
 
 end)
