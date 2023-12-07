@@ -1,45 +1,51 @@
-local http = require("resty.http")
-
-
 local jwt_decoder = require "kong.plugins.jwt.jwt_parser"
 local ngx_re_gmatch = ngx.re.gmatch
-local cjson = require "cjson"
+local http = require "resty.http"
 
-local function is_empty(s)
-  return s == nil or s == ''
-end
+local plugin = {
+  PRIORITY = 2000, -- set the plugin priority, which determines plugin execution order
+  VERSION = "0.1.0-1", -- version in X.Y.Z format. Check hybrid-mode compatibility requirements.
+}
 
-local function claim_split (inputstr, sep)
 
-  local resutl = {}
+local function fetch_data_from_redis_cluster(dvi)
+  local httpc = http.new()
+  local res, err = httpc:request_uri("http://localhost:8080/api/redis/" .. ngx.escape_uri(dvi), {
+    method = "GET",
+    headers = {
+      ["Content-Type"] = "application/json",
+      -- Add other headers as needed
+    }
+  })
 
-  if sep == nil then
-    sep = "%s"
+  if not res then
+    ngx.log(ngx.ERR, "Failed to request RedisCluster API: ", err)
+    return nil, err
   end
 
-  local t = {}
-  local parts = 0
-
-  for str in string.gmatch(inputstr, "([^"..sep.."])") do
-    parts = parts + 1
-    table.insert(t, str)
-  end
-
-  if parts == 2 then
-    result["key"] = t[1]
-    resutl["value"] = t[2]
+  if res.status == 200 then
+    if not res.body or res.body == "" then
+      kong.log.debug("Device is not blocked in Redis: Empty response body")
+      return nil, "Device is not blocked in Redis"
+    end
+    return res
   else
-    result = nil
+    kong.log.debug(ngx.ERR, "Can not find device blocked in Redis: ", res.status)
+    return nil, "Can not find device blocked in Redis"
   end
-
-  return result
 end
+
 
 local function retrieve_token(request, conf)
-  local authorization_header = request.get_headers()["authorization"]
+  local request_headers = request.get_headers()
+  local authorization_header = request_headers["authorization"]
+
+  if not request_headers then
+    return kong.response.exit(500, "jwt-auth -- Authorization header is empty")
+  end
 
   if not authorization_header then
-    return kong.response.exit(500, "jwt-clone -- error when retrieving token, can't find authorization")
+    return kong.response.exit(500, "jwt-auth -- Authorization header is missing")
   end
 
   if authorization_header then
@@ -61,111 +67,134 @@ local function retrieve_token(request, conf)
   end
 end
 
-local function init_jwt_claims_config(conf)
-  local result = {}
-
-  for k,v in pairs(conf.claims) do
-    result[k] = v
-  end
-
-  if (not is_empty(conf.validate_iss)) then
-    result["iss"] = conf.validate_iss
-  end
-
-  if (not is_empty(conf.validate_sub)) then
-      result["sub"] = conf.validate_sub
-  end
-
-  if (not is_empty(conf.validate_aud)) then
-    result["aud"] = conf.validate_aud
-  end
-
-  if (not is_empty(conf.validate_azp)) then
-    result["azp"] = conf.validate_azp
-  end
-
-  if (not is_empty(conf.validate_client_id)) then
-    result["client_id"] = conf.validate_client_id
-  end
-
-  if (not is_empty(conf.validate_dynamic1)) then
-    local claim_parts = claim_split(conf.validate_dynamic1,"==>")
-    if not is_empty(claim_parts) then
-      result[claim_parts["key"]]= claim_parts["value"]
+local function getMatchingLang(lang, langList, def)
+  -- Check if lang and langList are not nil
+  if lang and langList then
+    -- Loop through langList to check for a match
+    local tmp = lang[1]
+    kong.log.debug("TMP: "..tmp)
+    for i, value in ipairs(langList) do
+      if tmp == value then
+        kong.log.debug("Language Value: "..value)
+        return value
+      end
     end
   end
 
-  if (not is_empty(conf.validate_dynamic2)) then
-    local claim_parts = claim_split(conf.validate_dynamic2,"==>")
-    if not is_empty(claim_parts) then
-      result[claim_parts["key"]]= claim_parts["value"]
-    end
-  end
-
-  if (not is_empty(conf.validate_dynamic3)) then
-    local claim_parts = claim_split(conf.validate_dynamic3,"==>")
-    if not is_empty(claim_parts) then
-      result[claim_parts["key"]]= claim_parts["value"]
-    end
-  end
-
-  return result
+  return def
 end
 
-local plugin = {
-  PRIORITY = 1500, -- set the plugin priority, which determines plugin execution order
-  VERSION = "0.1.1-1", -- version in X.Y.Z format. Check hybrid-mode compatibility requirements.
-}
 
 -- runs in the 'access_by_lua_block'
 function plugin:access(plugin_conf)
-  local set_header = kong.service.request.set_header
-  local validate_claims = init_jwt_claims_config(plugin_conf)
+  -- local set_header = kong.service.request.set_header
+  local token, err1 = retrieve_token(kong.request, plugin_conf)
 
-  kong.log.inspect(validate_claims)
-
-  local token, err = retrieve_token(ngx.req, plugin_conf)
-
-  if err then
-    return kong.response.exit(500, "jwt-clone -- error retrieving token")
+  if err1 then
+    return kong.response.exit(500, "jwt-auth -- Error when retrieving token")
   end
   kong.log.debug(token)
-  if token then
-    set_header("jwt-token", token)
 
-    local jwt, err = jwt_decoder:new(token)
-    if err then
-      kong.log.error("Can't retrieve token!")
-      return kong.response.exit(500, "jwt-clone -- token was found, but failed to be decoded")
+  -- Khai bao cac truong can su dung tu config file
+  local network_type = plugin_conf.network_type or ""
+  local lang_list = plugin_conf.lang_list or {}
+  local ips = plugin_conf.verified_IPs or {}
+  -- local blocked_devices = plugin_conf.blocked_devices or {}
+  local def_lang = "vi"
+
+  local headers = kong.request.get_headers()
+  local langRequest = headers.lang
+  local request_ip = kong.client.get_forwarded_ip()
+
+  -- Set language
+  local lang = getMatchingLang(langRequest, lang_list, def_lang)
+  kong.log.debug(langRequest[1])
+  -- kong.log.debug(langRequest[2])
+  kong.log.debug("Lang: "..lang)
+
+  -- Check IP match
+  -- local isIPMatch = false
+  -- for _, ip in ipairs(ips) do
+  --   kong.log.debug("Checking IP: ", ip)
+  --   if ip == request_ip then
+  --     isIPMatch = true
+  --     break
+  --   end
+  -- end
+
+  -- if not isIPMatch then
+  --   kong.response.exit(403, "jwt-auth - Forbidden: IP not allowed: "..request_ip)
+  -- end
+
+  -- Check IP and set network_type properly
+  kong.log.debug("Request IP: ", request_ip)
+  for _, ip in ipairs(ips) do
+    kong.log.debug("Checking IP: ", ip)
+    if ip == request_ip then
+      network_type = "1" --Viettel
+      break
+    end
+  end
+
+  -- Set Zone id
+  local zone_id = plugin_conf.zone_id or "1"
+
+  if token then
+    local jwt, err2 = jwt_decoder:new(token)
+    if err2 then
+      kong.log.err("Fail to decode token!")
+      return kong.response.exit(500, "jwt-auth - Token was found, but failed to decoded")
     end
 
     local jwt_claims = jwt.claims
-    local headers = kong.request.get_headers()
-
     kong.log.debug(jwt_claims)
-    if(plugin_conf.option_expose_headers) then
-      for k, v in pairs(jwt_claims) do
-        if(plugin_conf.exposed_headers == "all" or string.match(","..plugin_conf.exposed_headers..",", ","..k..",")) then
-          local entry_type = type(v)
-          if entry_type == "string" then
-            set_header("jwt-claim-"..k, v)
-          else
-            set_header("jwt-claim-"..k, cjson.encode(v))
-          end
-          kong.log.debug(k..": "..v)
-        end
-      end
+
+    -- local isBlockedDevice = false
+    local dvi = jwt_claims.dvi
+    local userId = jwt_claims.userId or ""
+    local profileId = jwt_claims.profileId or ""
+    local gname = jwt_claims.gname or ""
+    local contentFilter = jwt_claims.contentFilter or ""
+
+    if not dvi then
+      kong.log.err("Cant find device code!")
+      return kong.response.exit(500, "jwt-auth - Cant find device code from token")
     end
+
+    local data, err = fetch_data_from_redis_cluster("DEVICE_BLOCKED:"..dvi)
+    kong.log.debug("DVI:"..dvi)
+
+    if data then
+      return kong.response.exit(403, "Device is blocked")
+    else
+      kong.log.debug(403, "Device is not blocked")
+    end
+
+
+    -- for _, block_dvi in ipairs(blocked_devices) do
+    --   kong.log.debug("Dvi blocked: "..block_dvi)
+    --   if dvi == block_dvi then
+    --     isBlockedDevice = true
+    --     break
+    --   end
+    -- end
+
+    -- if isBlockedDevice then
+    --   kong.response.exit(403, "Device is blocked")
+    -- end
+
     kong.log.debug(headers)
-    -- kong.log.debug("jwt-token: "..headers["jwt-token"])
-    kong.log.debug(kong.request.get_raw_body())
-    for claim_key,claim_value in pairs(validate_claims) do
-      if jwt_claims[claim_key] == nil or jwt_claims[claim_key] ~= claim_value then
-        kong.log.debug("jwt-clone- JSON Web Token has invalid claim value for '"..tostring(claim_key).."'")
-        kong.log.debug("jwt-clone - JSON Web Token has invalid claim value for '"..tostring(claim_key).."' you sent '"..tostring(jwt_claims[claim_key]).."' expecting '"..tostring(claim_value).."'")
-        return kong.response.exit(401, "jwt-clone - JSON Web Token has invalid claim value for '"..tostring(claim_key).."' you sent '"..tostring(jwt_claims[claim_key]).."' expecting '"..tostring(claim_value).."'")
-      end
-    end
+
+    kong.response.set_header("Zone-id", zone_id)
+    kong.response.set_header("User-Id", userId)
+    kong.response.set_header("Profile-Id", profileId)
+    kong.response.set_header("Content-Filter",contentFilter)
+    kong.response.set_header("Gname",gname)
+    kong.response.set_header("dvi",dvi)
+    kong.response.set_header("Network-type", network_type)
+    kong.response.set_header("X-Forwarded-Request-IP", kong.client.get_forwarded_ip())
+    kong.response.set_header("X-Request-IP", kong.client.get_ip())
+    kong.response.set_header("Language", lang)
   end
 end
 

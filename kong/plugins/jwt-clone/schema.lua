@@ -1,8 +1,7 @@
 local typedefs = require "kong.db.schema.typedefs"
 
 
-local PLUGIN_NAME = "jwt-clone"
-
+local PLUGIN_NAME = "jwt-clone2"
 
 local schema = {
   name = PLUGIN_NAME,
@@ -11,38 +10,57 @@ local schema = {
     { consumer = typedefs.no_consumer },  -- this plugin cannot be configured on a consumer (typical for auth plugins)
     { protocols = typedefs.protocols_http },
     { config = {
-        -- The 'config' record is the custom part of the plugin schema
         type = "record",
         fields = {
-            -- Các trường cấu hình cho plugin
-            { log_level = { type = "string", default = "info" } },
-            { option_expose_headers = { type = "boolean", default = true } },
-            { exposed_headers = { type = "string", default = "all" } },
-            { validate_iss = { type = "string" } },
-            { validate_sub = { type = "string" } },
-            { validate_aud = { type = "string" } },
-            { validate_azp = { type = "string" } },
-            { validate_client_id = { type = "string" } },
-            { validate_dynamic1 = { type = "string" } },
-            { validate_dynamic2 = { type = "string" } },
-            { validate_dynamic3 = { type = "string" } },
-            { claims = {
-                type = "map",
-                keys = {
-                    type = "string",
-                    match_none = {
-                        { pattern = "^$", err = "Claim name không thể để trống" },
-                    },
-                },
-                values = {
-                    type = "string",
-                    match_none = {
-                        { pattern = "^$", err = "Giá trị claim để kiểm tra không thể để trống" },
-                    },
-                },
-                default = {}
-            } },
-        },
+          {
+            zone_id = {
+              description = "Zone identification",
+              type = "string",
+              -- default = "0",
+            },
+          },
+          {
+            network_type = {
+              description = "Network type defined here: Viettel, Vina, Mobifone,...",
+              type = "string",
+              default = "0",-- Wifi
+            },
+          },
+          {
+            lang_list = {
+              description = "Language can using",
+              type = "array",
+              elements = {
+                type = "string",
+              },
+              default = {"vi","en",},
+            },
+          },
+          {
+            verified_IPs = {
+              description = "List of IPs that from Viettel",
+              type = "array",
+              elements = {
+                type = "string",
+              },
+              default = {
+                "10.1.1.1",
+                "10.1.0.0/16",
+                "10.2.0.0/16",
+                "10.3.0.0/16",
+                "10.4.0.0/16",
+                "10.5.0.0/16",
+                "10.6.0.0/16",
+                "10.7.0.0/16",
+                "10.8.0.0/16",
+                "10.9.0.0/16",
+                "10.10.0.0/16",
+                "10.11.0.0/16",
+                "10.12.0.0/16",
+              }
+            }
+          },
+        }
       },
     },
   },
