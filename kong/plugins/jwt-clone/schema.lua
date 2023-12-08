@@ -60,6 +60,55 @@ local schema = {
               }
             }
           },
+          { redis_host = typedefs.host },
+          { redis_port = typedefs.port({
+             default = 6379
+            }),
+          },
+          { redis_password =
+            {
+              description = "When using the `redis` policy, this property specifies the password to connect to the Redis server.",
+              type = "string",
+              len_min = 0,
+              referenceable = true
+            },
+          },
+          { redis_username =
+            {
+              description = "When using the `redis` policy, this property specifies the username to connect to the Redis server when ACL authentication is desired.",
+              type = "string",
+              referenceable = true
+            },
+          },
+          { redis_ssl =
+            {
+              description = "When using the `redis` policy, this property specifies if SSL is used to connect to the Redis server.",
+              type = "boolean",
+              required = true,
+              default = false,
+            },
+          },
+          { redis_ssl_verify =
+            {
+              description = "When using the `redis` policy with `redis_ssl` set to `true`, this property specifies it server SSL certificate is validated. Note that you need to configure the lua_ssl_trusted_certificate to specify the CA (or server) certificate used by your Redis server. You may also need to configure lua_ssl_verify_depth accordingly.",
+              type = "boolean",
+              required = true,
+              default = false }, },
+          { redis_server_name = typedefs.sni },
+          { redis_timeout =
+            {
+              description = "When using the `redis` policy, this property specifies the timeout in milliseconds of any command submitted to the Redis server.",
+              type = "number",
+              default = 2000,
+            },
+          },
+          { redis_database =
+            {
+              description = "When using the `redis` policy, this property specifies the Redis database to use.",
+              type = "integer",
+              default = 0
+            },
+          },
         }
       },
     },

@@ -1,39 +1,14 @@
 local jwt_decoder = require "kong.plugins.jwt.jwt_parser"
+local redis = require "kong.plugins.jwt-clone.redis_connect"
 local ngx_re_gmatch = ngx.re.gmatch
 local http = require "resty.http"
+
+local kong = kong
 
 local plugin = {
   PRIORITY = 2000, -- set the plugin priority, which determines plugin execution order
   VERSION = "0.1.0-1", -- version in X.Y.Z format. Check hybrid-mode compatibility requirements.
 }
-
-
-local function fetch_data_from_redis_cluster(dvi)
-  local httpc = http.new()
-  local res, err = httpc:request_uri("http://localhost:8080/api/redis/" .. ngx.escape_uri(dvi), {
-    method = "GET",
-    headers = {
-      ["Content-Type"] = "application/json",
-      -- Add other headers as needed
-    }
-  })
-
-  if not res then
-    ngx.log(ngx.ERR, "Failed to request RedisCluster API: ", err)
-    return nil, err
-  end
-
-  if res.status == 200 then
-    if not res.body or res.body == "" then
-      kong.log.debug("Device is not blocked in Redis: Empty response body")
-      return nil, "Device is not blocked in Redis"
-    end
-    return res
-  else
-    kong.log.debug(ngx.ERR, "Can not find device blocked in Redis: ", res.status)
-    return nil, "Can not find device blocked in Redis"
-  end
-end
 
 
 local function retrieve_token(request, conf)
@@ -83,7 +58,6 @@ local function getMatchingLang(lang, langList, def)
 
   return def
 end
-
 
 -- runs in the 'access_by_lua_block'
 function plugin:access(plugin_conf)
@@ -141,6 +115,7 @@ function plugin:access(plugin_conf)
 
   if token then
     local jwt, err2 = jwt_decoder:new(token)
+
     if err2 then
       kong.log.err("Fail to decode token!")
       return kong.response.exit(500, "jwt-auth - Token was found, but failed to decoded")
@@ -161,13 +136,17 @@ function plugin:access(plugin_conf)
       return kong.response.exit(500, "jwt-auth - Cant find device code from token")
     end
 
-    local data, err = fetch_data_from_redis_cluster("DEVICE_BLOCKED:"..dvi)
+    local data = redis:get_data_from_redis(plugin_conf, "DEVICE_BLOCKED:"..dvi)
+    -- local data = get_data_from_redis(plugin_conf, "DEVICE_BLOCKED:"..dvi)
+
+    -- local data, err = fetch_data_from_redis_cluster("DEVICE_BLOCKED:"..dvi)
     kong.log.debug("DVI:"..dvi)
+    kong.log.debug(data)
 
     if data then
       return kong.response.exit(403, "Device is blocked")
     else
-      kong.log.debug(403, "Device is not blocked")
+      kong.log.debug("Device is not blocked")
     end
 
 

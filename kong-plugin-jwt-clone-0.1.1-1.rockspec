@@ -34,5 +34,6 @@ build = {
     -- TODO: add any additional code files added to the plugin
     ["kong.plugins."..plugin_name..".handler"] = "kong/plugins/"..plugin_name.."/handler.lua",
     ["kong.plugins."..plugin_name..".schema"] = "kong/plugins/"..plugin_name.."/schema.lua",
+    ["kong.plugins."..plugin_name..".redis_connect"] = "kong/plugins/"..plugin_name.."/redis_connect.lua",
   }
 }
