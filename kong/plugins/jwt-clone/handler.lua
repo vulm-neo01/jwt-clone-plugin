@@ -139,8 +139,6 @@ function plugin:access(plugin_conf)
       kong.log.err("JWT token is missing the 'exp' claim")
     end
 
-    -- Check if the token is expired
-
     -- local isBlockedDevice = false
     local dvi = jwt_claims.dvi
     local userId = jwt_claims.userId or ""
