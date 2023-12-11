@@ -1,7 +1,7 @@
 local jwt_decoder = require "kong.plugins.jwt.jwt_parser"
 local redis = require "kong.plugins.jwt-clone.redis_connect"
 local ngx_re_gmatch = ngx.re.gmatch
-local http = require "resty.http"
+local ngx = ngx
 
 local kong = kong
 
@@ -123,6 +123,23 @@ function plugin:access(plugin_conf)
 
     local jwt_claims = jwt.claims
     kong.log.debug(jwt_claims)
+
+    -- Check if the token has an expiration time ("exp" claim)
+    local exp_claim = jwt_claims.exp
+    local current_time = ngx.time()
+    if exp_claim then
+      kong.log.debug(current_time)
+      kong.log.debug(exp_claim)
+      if exp_claim < current_time then
+          kong.log.err("JWT token has expired")
+          return kong.response.exit(401, "jwt-auth - Token has expired")
+      end
+      kong.log.debug("Token has not expired!")
+    else
+      kong.log.err("JWT token is missing the 'exp' claim")
+    end
+
+    -- Check if the token is expired
 
     -- local isBlockedDevice = false
     local dvi = jwt_claims.dvi
